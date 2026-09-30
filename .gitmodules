@@ -1,3 +1,4 @@
 [submodule "dosbox-src"]
 	path = dosbox-src
-	url = https://github.com/pmanyeh/dosbox-x.git
+	url = https://github.com/wicanr2/dosbox-x.git
+	branch = ai-bridge-watch-int-log
