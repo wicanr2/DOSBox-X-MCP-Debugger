@@ -168,6 +168,58 @@ def list_breakpoints() -> list:
 
 
 @mcp.tool()
+def set_memory_breakpoint(address: str = "", linear: str = "", length: int = 1) -> dict:
+    """
+    Stop when any of `length` (1-16) bytes changes -- DOSBox-X's own memory
+    breakpoints (BPM / BPLM). Give exactly one of `address` ("SEG:OFF") or
+    `linear` (hex). When one fires, get_debug_status() carries
+    `last_memory_hit` (address, old, new) until the next continue. Use it to
+    answer "who writes this variable". Needs a --enable-debug=heavy build;
+    fails with NOT_SUPPORTED otherwise.
+    """
+
+    if bool(address) == bool(linear):
+        return protocol_error("INVALID_PARAMETER", "give exactly one of address or linear")
+    return _guarded_native(dosbox.set_memory_breakpoint, address or None, linear or None, length)
+
+
+@mcp.tool()
+def set_interrupt_breakpoint(interrupt: int, ah: int = -1, al: int = -1) -> dict:
+    """
+    Stop before `INT interrupt` runs, optionally only when AH (and AL)
+    match; -1 means any. Example: interrupt=0x21, ah=0x4B stops on DOS
+    EXEC, interrupt=0x21, ah=0x3D on file open.
+    """
+
+    return _guarded_native(dosbox.set_interrupt_breakpoint, interrupt,
+                           None if ah < 0 else ah, None if al < 0 else al)
+
+
+@mcp.tool()
+def set_log_breakpoint(address: str, stack_words: int = 0) -> dict:
+    """
+    A breakpoint at "SEG:OFF" that does not stop: each hit records the
+    registers, segment registers and `stack_words` (0-32) words at SS:SP,
+    then the guest resumes on its own. Read the records with read_log().
+    Use it to trace every call of a function (arguments, return address)
+    without stepping through each one.
+    """
+
+    return _guarded_native(dosbox.set_log_breakpoint, address, stack_words)
+
+
+@mcp.tool()
+def read_log(max_entries: int = 1000, clear: bool = True) -> dict:
+    """
+    Return {"entries", "remaining", "dropped"} from the logging-breakpoint
+    buffer (the newest 4096 records are kept; `dropped` counts older ones
+    that were discarded). Works while the guest is running.
+    """
+
+    return _guarded_native(dosbox.read_log, max_entries, clear)
+
+
+@mcp.tool()
 def continue_execution() -> dict:
     """
     Resume real guest CPU execution on the real, running DOSBox-X instance

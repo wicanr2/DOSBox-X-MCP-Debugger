@@ -304,11 +304,57 @@ class DOSBoxClient:
         return self.request("breakpoint.delete", {"id": breakpoint_id})
 
     def list_breakpoints(self) -> list:
-        """List all physical (address) breakpoints currently in DOSBox-X's
-        own breakpoint list."""
+        """List every breakpoint in DOSBox-X's own breakpoint list, each
+        tagged with its `type` (physical, log, memory, memory_linear,
+        interrupt)."""
 
         result = self.request("breakpoint.list")
         return result.get("breakpoints", []) if isinstance(result, dict) else []
+
+    # -- Phase 6 (docs/phase6-watch-int-log-breakpoints.md) ---------------
+
+    def set_memory_breakpoint(self, address: Optional[str] = None, linear: Optional[str] = None,
+                              length: int = 1) -> dict:
+        """Stop when any of `length` (1-16) bytes changes, using DOSBox-X's
+        own memory breakpoints (BPM / BPLM). Give exactly one of `address`
+        ("SEG:OFF") or `linear` (hex). When one fires, get_debug_status()
+        carries `last_memory_hit` (address, old, new) until the next
+        continue. Needs a --enable-debug=heavy build (NOT_SUPPORTED
+        otherwise)."""
+
+        if (address is None) == (linear is None):
+            raise ValueError("give exactly one of address or linear")
+        params: dict = {"length": length}
+        if address is not None:
+            params["address"] = address
+        else:
+            params["linear"] = linear
+        return self.request("breakpoint.set_memory", params)
+
+    def set_interrupt_breakpoint(self, interrupt: int, ah: Optional[int] = None,
+                                 al: Optional[int] = None) -> dict:
+        """Stop before `INT interrupt` runs, optionally only for a given AH
+        (and AL). Example: interrupt=0x21, ah=0x4B stops on DOS EXEC."""
+
+        params: dict = {"int": interrupt}
+        if ah is not None:
+            params["ah"] = ah
+        if al is not None:
+            params["al"] = al
+        return self.request("breakpoint.set_interrupt", params)
+
+    def set_log_breakpoint(self, address: str, stack_words: int = 0) -> dict:
+        """A breakpoint that records registers, segments and `stack_words`
+        (0-32) words at SS:SP, then resumes on its own. Read the records
+        with read_log()."""
+
+        return self.request("breakpoint.set_log", {"address": address, "stack_words": stack_words})
+
+    def read_log(self, max_entries: int = 1000, clear: bool = True) -> dict:
+        """Return {"entries", "remaining", "dropped"} from the logging-
+        breakpoint buffer (newest 4096 kept). Works while the guest runs."""
+
+        return self.request("log.read", {"max": max_entries, "clear": clear})
 
     def continue_execution(self) -> dict:
         """Resume real guest CPU execution -- the SAME transition the
